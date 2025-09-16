@@ -5,33 +5,33 @@ use CodeIgniter\Router\RouteCollection;
 /**
  * @var RouteCollection $routes
  */
-$routes->get('/', 'Home::index');#home
 
-$routes->get('/hello', 'Home::hello');#hello world with ci4
+// Default route: arahkan ke dashboard jika sudah login
+$routes->get('/', 'DashboardController::index', ['filter' => 'auth']);
 
-$routes->get('mahasiswa/table','Table::HTML');#table html manual
+// ===== ROUTES UNTUK AUTH =====
+$routes->get('/login', 'AuthController::login');          // form login
+$routes->post('/login', 'AuthController::prosesLogin');   // proses login
+$routes->get('/logout', 'AuthController::logout');        // logout
 
-$routes->get('mahasiswa/table/database', 'Table::table_mhs');#table html with looping from database mahasiswa
+// Semua route di dalam group ini dilindungi oleh filter auth (harus login)
+$routes->group('', ['filter' => 'auth'], function ($routes) {
 
-$routes->get('mahasiswa/table/list','Table::table_link_mhs');#table biodata from database mahasiswa to detail mahasiswa with link
+    // dashbooard untuk admin dan user
+    $routes->get('/dashboard', 'DashboardController::index');
 
-$routes->get('mahasiswa/table/(:segment)',"Table::detail_mhs/$1");#table detail mahasiswa from link 
+    //routes untuk admin
+    $routes->group('admin', function ($routes) {
+        //routes untuk control courses
+        $routes->resource('courses', ['controller' => 'AdminCoursesController']);
+        //routes untuk control students
+        $routes->resource('students', ['controller' => 'AdminStudentsController']);
+    });
 
-#CRUD
-
-#read
-$routes->get('mahasiswa', 'CRUD::read_mhs');#read all data from database with loop
-
-#create
-$routes->get('mahasiswa/add',"CRUD::view_create_mhs");#create new biodata mahasiswa
-$routes->post('mahasiswa/add/simpan','CRUD::create_mhs');#save new mahasiswa to database
-
-#update
-$routes->get('mahasiswa/edit/(:segment)', 'CRUD::edit/$1');#update biodata mahasiswa with url edit/nim-target
-$routes->post('mahasiswa/update/(:segment)', 'CRUD::update/$1');#update biodata mahasiswa and save to database
-
-#delete
-$routes->get('mahasiswa/delete/(:segment)', 'CRUD::delete_mhs/$1');#delete biodata mahasiswa from link provided with url
-
-
-
+    //routes untuk mahasiswa
+    $routes->group('mahasiswa', function ($routes) {
+        $routes->get('courses', 'MahasiswaController::courses');       // daftar mata kuliah yang bisa diambil
+        $routes->get('myCourses', 'MahasiswaController::myCourses');   // daftar mata kuliah yang sudah diambil
+        $routes->get('enroll/(:num)', 'MahasiswaController::enroll/$1'); // ambil/enroll mata kuliah tertentu
+    });
+});
