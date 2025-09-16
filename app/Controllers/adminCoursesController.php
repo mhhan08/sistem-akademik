@@ -2,163 +2,105 @@
 namespace App\Controllers;
 
 use App\Controllers\BaseController;
-use App\Models\StudentModel;
-use App\Models\UserModel;
+use App\Models\CourseModel;
 
-class AdminStudentsController extends BaseController
+class AdminCoursesController extends AdminBaseController
 {
-    protected $studentModel;
-    protected $userModel;
+    protected $courseModel;
 
     public function __construct()
     {
-        // Inisialisasi model supaya bisa dipakai di semua method
-        $this->studentModel = new StudentModel();
-        $this->userModel    = new UserModel();
+        // Inisialisasi model agar bisa dipakai di semua method
+        $this->courseModel = new CourseModel();
     }
 
     public function index()
     {
-        $this->authorize(); // cek role Admin
-        // Ambil data student + join dengan users
-        $data['students'] = $this->studentModel
-            ->select('students.id, users.username, users.full_name, students.entry_year')
-            ->join('users', 'users.id = students.user_id')
-            ->findAll();
 
-        return view('admin/students_index', $data);
+        // Ambil semua data course dari database
+        $data['courses'] = $this->courseModel->findAll();
+        // Kirim ke view index
+        return view('admin/courses_index', $data);
     }
 
     public function new()
     {
-        $this->authorize();
-        // Tampilkan form tambah mahasiswa
-        return view('admin/students_form', [
+        // Tampilkan form tambah course, kirim service validasi
+        return view('admin/courses_form', [
             'validation' => \Config\Services::validation()
         ]);
     }
 
     public function create()
     {
-        $this->authorize();
-
-        // Validasi input
+        // Aturan validasi input
         $rules = [
-            'username'   => 'required|min_length[3]|is_unique[users.username]',
-            'full_name'  => 'required',
-            'entry_year' => 'required|numeric',
-            'password'   => 'required|min_length[6]'
+            'course_name' => 'required|min_length[3]',
+            'credits'     => 'required|numeric'
         ];
 
+        // Jika validasi gagal, balik ke form dengan error message
         if (!$this->validate($rules)) {
-            return redirect()->to('/admin/students/new')
+            return redirect()->to('/admin/courses/new')
                 ->withInput()
                 ->with('validation', $this->validator);
         }
 
-        // Insert user baru
-        $userId = $this->userModel->insert([
-            'username' => $this->request->getPost('username'),
-            'full_name'=> $this->request->getPost('full_name'),
-            'password' => password_hash($this->request->getPost('password'), PASSWORD_DEFAULT),
-            'role'     => 'Mahasiswa'
+        // Simpan data course baru
+        $this->courseModel->save([
+            'course_name' => $this->request->getPost('course_name'),
+            'credits'     => $this->request->getPost('credits')
         ]);
 
-        // Insert student dengan foreign key ke users
-        $this->studentModel->insert([
-            'user_id'    => $userId,
-            'entry_year' => $this->request->getPost('entry_year')
-        ]);
-
-        return redirect()->to('/admin/students')
-            ->with('success', 'Mahasiswa berhasil ditambahkan.');
+        // Redirect ke daftar dengan pesan sukses
+        return redirect()->to('/admin/courses')
+            ->with('success', 'Course berhasil ditambahkan.');
     }
 
     public function edit($id = null)
     {
-        $this->authorize();
-        // Ambil data student + user
-        $student = $this->studentModel
-            ->select('students.id, users.username, users.full_name, students.entry_year')
-            ->join('users', 'users.id = students.user_id')
-            ->find($id);
+        // Cari course berdasarkan ID
+        $course = $this->courseModel->find($id);
+        // Jika tidak ada, lempar error 404
+        if (!$course) throw new \CodeIgniter\Exceptions\PageNotFoundException('Course tidak ditemukan.');
 
-        if (!$student) throw new \CodeIgniter\Exceptions\PageNotFoundException('Mahasiswa tidak ditemukan.');
-
-        return view('admin/students_form', [
-            'student'    => $student,
+        // Tampilkan form edit dengan data course
+        return view('admin/courses_form', [
+            'course'     => $course,
             'validation' => \Config\Services::validation()
         ]);
     }
 
     public function update($id = null)
     {
-        $this->authorize();
-
-        // Cari student berdasarkan id
-        $student = $this->studentModel->find($id);
-        if (!$student) throw new \CodeIgniter\Exceptions\PageNotFoundException('Mahasiswa tidak ditemukan.');
-
-        $userId = $student['user_id']; // ambil user terkait
-
-        // Validasi update username agar unik tapi abaikan user sendiri
+        // Aturan validasi
         $rules = [
-            'username'   => "required|min_length[3]|is_unique[users.username,id,{$userId}]",
-            'full_name'  => 'required',
-            'entry_year' => 'required|numeric',
+            'course_name' => 'required|min_length[3]',
+            'credits'     => 'required|numeric'
         ];
 
+        // Jika gagal validasi, balik ke form edit
         if (!$this->validate($rules)) {
-            return redirect()->to("/admin/students/$id/edit")
+            return redirect()->to('/admin/courses/'.$id.'/edit')
                 ->withInput()
                 ->with('validation', $this->validator);
         }
 
-        // Update data user
-        $userData = [
-            'username'  => $this->request->getPost('username'),
-            'full_name' => $this->request->getPost('full_name'),
-        ];
-        // Kalau ada input password baru → update
-        if ($this->request->getPost('password')) {
-            $userData['password'] = password_hash($this->request->getPost('password'), PASSWORD_DEFAULT);
-        }
-        $this->userModel->update($userId, $userData);
-
-        // Update data student
-        $this->studentModel->update($id, [
-            'entry_year' => $this->request->getPost('entry_year')
+        // Update data course berdasarkan ID
+        $this->courseModel->update($id, [
+            'course_name' => $this->request->getPost('course_name'),
+            'credits'     => $this->request->getPost('credits')
         ]);
 
-        return redirect()->to('/admin/students')
-            ->with('success', 'Mahasiswa berhasil diperbarui.');
+        return redirect()->to('/admin/courses')
+            ->with('success', 'Course berhasil diubah.');
     }
 
     public function delete($id = null)
     {
-        $studentModel = new \App\Models\StudentModel();
-        $userModel = new \App\Models\UserModel();
-
-        $student = $studentModel->find($id);
-        if ($student) {
-            // Hapus user
-            $userModel->delete($student['user_id']);
-            // hapus student juga
-            $studentModel->delete($id);
-        }
-
-        return redirect()->to('/admin/students')
-            ->with('success', 'Data mahasiswa berhasil dihapus.');
-    }
-
-    private function authorize()
-    {
-        // Proteksi: hanya Admin boleh akses
-        if (session()->get('role') !== 'Admin') {
-            return redirect()->to('/dashboard')
-                ->with('error', 'Akses ditolak!')
-                ->send();
-            exit;
-        }
+        // Hapus data course
+        $this->courseModel->delete($id);
+        return redirect()->to('/admin/courses')
+            ->with('success', 'Course berhasil dihapus.');
     }
 }

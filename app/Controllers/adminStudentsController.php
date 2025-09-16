@@ -5,7 +5,7 @@ use App\Controllers\BaseController;
 use App\Models\StudentModel;
 use App\Models\UserModel;
 
-class AdminStudentsController extends BaseController
+class AdminStudentsController extends AdminBaseController
 {
     protected $studentModel;
     protected $userModel;
@@ -18,17 +18,16 @@ class AdminStudentsController extends BaseController
 
     public function index()
     {
-        $this->authorize();
         $data['students'] = $this->studentModel
-            ->select('students.id, users.username, users.full_name, students.entry_year')
+            ->select('students.id, users.username, users.full_name, students.entry_year, students.user_id')
             ->join('users', 'users.id = students.user_id')
             ->findAll();
+
         return view('admin/students_index', $data);
     }
 
     public function new()
     {
-        $this->authorize();
         return view('admin/students_form', [
             'validation' => \Config\Services::validation()
         ]);
@@ -36,12 +35,10 @@ class AdminStudentsController extends BaseController
 
     public function create()
     {
-        $this->authorize();
-
         $rules = [
             'username'   => 'required|min_length[3]|is_unique[users.username]',
             'full_name'  => 'required',
-            'entry_year' => 'required|numeric',
+            'entry_year' => 'required|numeric|exact_length[4]',
             'password'   => 'required|min_length[6]'
         ];
 
@@ -51,7 +48,6 @@ class AdminStudentsController extends BaseController
                 ->with('validation', $this->validator);
         }
 
-        // insert ke users
         $userId = $this->userModel->insert([
             'username' => $this->request->getPost('username'),
             'full_name'=> $this->request->getPost('full_name'),
@@ -59,20 +55,19 @@ class AdminStudentsController extends BaseController
             'role'     => 'Mahasiswa'
         ]);
 
-        // insert ke students
         $this->studentModel->insert([
             'user_id'    => $userId,
             'entry_year' => $this->request->getPost('entry_year')
         ]);
 
-        return redirect()->to('/admin/students')->with('success', 'Mahasiswa berhasil ditambahkan.');
+        return redirect()->to('/admin/students')
+            ->with('success', 'Mahasiswa berhasil ditambahkan.');
     }
 
     public function edit($id = null)
     {
-        $this->authorize();
         $student = $this->studentModel
-            ->select('students.id, users.username, users.full_name, students.entry_year')
+            ->select('students.id, students.user_id, users.username, users.full_name, students.entry_year')
             ->join('users', 'users.id = students.user_id')
             ->find($id);
 
@@ -86,8 +81,6 @@ class AdminStudentsController extends BaseController
 
     public function update($id = null)
     {
-        $this->authorize();
-
         $student = $this->studentModel->find($id);
         if (!$student) throw new \CodeIgniter\Exceptions\PageNotFoundException('Mahasiswa tidak ditemukan.');
 
@@ -96,7 +89,7 @@ class AdminStudentsController extends BaseController
         $rules = [
             'username'   => "required|min_length[3]|is_unique[users.username,id,{$userId}]",
             'full_name'  => 'required',
-            'entry_year' => 'required|numeric',
+            'entry_year' => 'required|numeric|exact_length[4]',
         ];
 
         if (!$this->validate($rules)) {
@@ -105,45 +98,34 @@ class AdminStudentsController extends BaseController
                 ->with('validation', $this->validator);
         }
 
-        // update user
         $userData = [
             'username'  => $this->request->getPost('username'),
             'full_name' => $this->request->getPost('full_name'),
         ];
+
         if ($this->request->getPost('password')) {
             $userData['password'] = password_hash($this->request->getPost('password'), PASSWORD_DEFAULT);
         }
         $this->userModel->update($userId, $userData);
 
-        // update student
         $this->studentModel->update($id, [
             'entry_year' => $this->request->getPost('entry_year')
         ]);
 
-        return redirect()->to('/admin/students')->with('success', 'Mahasiswa berhasil diperbarui.');
+        return redirect()->to('/admin/students')
+            ->with('success', 'Mahasiswa berhasil diperbarui.');
     }
 
     public function delete($id = null)
     {
-        $studentModel = new \App\Models\StudentModel();
-        $userModel = new \App\Models\UserModel();
-
-        $student = $studentModel->find($id);
+        $student = $this->studentModel->find($id);
         if ($student) {
-            // hapus student
-            $userModel->delete($student['user_id']);
-            //hapus user juga
-            $studentModel->delete($id);
+            // Hapus user (data student akan ikut terhapus oleh database
+            // karena di migrasi Anda ada 'ON DELETE CASCADE')
+            $this->userModel->delete($student['user_id']);
         }
 
-        return redirect()->to('/admin/students')->with('success', 'Data mahasiswa berhasil dihapus.');
-    }
-
-    private function authorize()
-    {
-        if (session()->get('role') !== 'Admin') {
-            return redirect()->to('/dashboard')->with('error', 'Akses ditolak!')->send();
-            exit;
-        }
+        return redirect()->to('/admin/students')
+            ->with('success', 'Data mahasiswa berhasil dihapus.');
     }
 }

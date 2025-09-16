@@ -5,10 +5,13 @@
 
 <form method="post"
       action="<?= isset($student)
-          ? site_url('admin/students/'.$student['id'].'/update')
+          ? site_url('admin/students/'.$student['id'])
           : site_url('admin/students') ?>">
 
     <?= csrf_field() ?>
+    <?php if (isset($student)): ?>
+        <input type="hidden" name="_method" value="PUT">
+    <?php endif; ?>
 
     <div class="mb-3">
         <label>Username:</label>
