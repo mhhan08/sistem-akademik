@@ -3,90 +3,87 @@ namespace App\Controllers;
 
 use App\Controllers\BaseController;
 use App\Models\CourseModel;
+use CodeIgniter\Exceptions\PageNotFoundException;
 
-class AdminCoursesController extends AdminBaseController
+class AdminCoursesController extends BaseController
 {
     protected $courseModel;
 
     public function __construct()
     {
-        // Inisialisasi model agar bisa dipakai di semua method
         $this->courseModel = new CourseModel();
     }
 
+    // return semua data course
     public function index()
     {
+        $data = [
+            'courses' => $this->courseModel->findAll()
+        ];
 
-        // Ambil semua data course dari database
-        $data['courses'] = $this->courseModel->findAll();
-        // Kirim ke view index
         return view('admin/courses_index', $data);
     }
 
+    // return form untuk tambah courses
     public function new()
     {
-        // Tampilkan form tambah course, kirim service validasi
         return view('admin/courses_form', [
             'validation' => \Config\Services::validation()
         ]);
     }
 
+    // simpan courses baru
     public function create()
     {
-        // Aturan validasi input
         $rules = [
             'course_name' => 'required|min_length[3]',
-            'credits'     => 'required|numeric'
+            'credits'     => 'required|numeric|greater_than[0]'
         ];
 
-        // Jika validasi gagal, balik ke form dengan error message
         if (!$this->validate($rules)) {
-            return redirect()->to('/admin/courses/new')
+            return redirect()->back()
                 ->withInput()
                 ->with('validation', $this->validator);
         }
 
-        // Simpan data course baru
         $this->courseModel->save([
             'course_name' => $this->request->getPost('course_name'),
             'credits'     => $this->request->getPost('credits')
         ]);
 
-        // Redirect ke daftar dengan pesan sukses
         return redirect()->to('/admin/courses')
             ->with('success', 'Course berhasil ditambahkan.');
     }
 
+    // form untuk edit courses
     public function edit($id = null)
     {
-        // Cari course berdasarkan ID
         $course = $this->courseModel->find($id);
-        // Jika tidak ada, lempar error 404
-        if (!$course) throw new \CodeIgniter\Exceptions\PageNotFoundException('Course tidak ditemukan.');
 
-        // Tampilkan form edit dengan data course
+        if (!$course) {
+            throw new PageNotFoundException('Course dengan ID ' . $id . ' tidak ditemukan.');
+        }
+
         return view('admin/courses_form', [
             'course'     => $course,
             'validation' => \Config\Services::validation()
         ]);
     }
 
+    // updat courses
     public function update($id = null)
     {
-        // Aturan validasi
         $rules = [
             'course_name' => 'required|min_length[3]',
-            'credits'     => 'required|numeric'
+            'credits'     => 'required|numeric|greater_than[0]'
         ];
 
-        // Jika gagal validasi, balik ke form edit
         if (!$this->validate($rules)) {
-            return redirect()->to('/admin/courses/'.$id.'/edit')
+            return redirect()->back()
                 ->withInput()
                 ->with('validation', $this->validator);
         }
 
-        // Update data course berdasarkan ID
         $this->courseModel->update($id, [
             'course_name' => $this->request->getPost('course_name'),
             'credits'     => $this->request->getPost('credits')
@@ -96,10 +93,18 @@ class AdminCoursesController extends AdminBaseController
             ->with('success', 'Course berhasil diubah.');
     }
 
+    // Hapus course
     public function delete($id = null)
     {
-        // Hapus data course
+        $course = $this->courseModel->find($id);
+
+        if (!$course) {
+            return redirect()->to('/admin/courses')
+                ->with('error', 'Course tidak ditemukan.');
+        }
+
         $this->courseModel->delete($id);
+
         return redirect()->to('/admin/courses')
             ->with('success', 'Course berhasil dihapus.');
     }
